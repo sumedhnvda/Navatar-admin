@@ -8,6 +8,7 @@ import {
   Bot,
   LogOut,
   ShieldCheck,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/firebase/config";
@@ -18,6 +19,7 @@ const navItems = [
   { name: "Admins", href: "/dashboard/admins", icon: ShieldCheck },
   { name: "Doctors", href: "/dashboard/doctors", icon: Users },
   { name: "Navatars", href: "/dashboard/navatars", icon: Bot },
+  { name: "Feedback", href: "/dashboard/feedback", icon: MessageSquare },
 ];
 
 export default function Sidebar() {

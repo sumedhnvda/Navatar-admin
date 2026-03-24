@@ -17,6 +17,16 @@ function formatSecs(secs) {
   return formatDuration(d, { format: ["minutes", "seconds"] });
 }
 
+function formatTo12Hr(time) {
+  if (!time) return "—";
+  if (time.includes("AM") || time.includes("PM")) return time;
+  const [h, m] = time.split(":");
+  const hrs = parseInt(h, 10);
+  const ampm = hrs >= 12 ? "PM" : "AM";
+  const formattedHrs = hrs % 12 || 12;
+  return `${formattedHrs}:${m} ${ampm}`;
+}
+
 export default function NavatarHistoryPage() {
   const { id } = useParams();
   const { adminData } = useAuth();
@@ -28,6 +38,8 @@ export default function NavatarHistoryPage() {
   const [avgDuration, setAvgDuration] = useState("—");
   const [totalDuration, setTotalDuration] = useState("—");
   const [activeTab, setActiveTab] = useState("sessions");
+  const [visibleSessions, setVisibleSessions] = useState(5);
+  const [visibleBookings, setVisibleBookings] = useState(5);
 
   useEffect(() => {
     async function fetchData() {
@@ -158,15 +170,29 @@ export default function NavatarHistoryPage() {
         <div className="overflow-x-auto">
           {activeTab === "sessions" ? (
             sessions.length === 0 ? <p className="p-6 text-center text-zinc-500">No sessions recorded.</p> : (
-              <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800"><thead className="bg-zinc-50/80 dark:bg-zinc-900/40"><tr><th className="px-6 py-3 text-left text-xs font-semibold">Doctor</th><th className="px-6 py-3 text-left text-xs font-semibold">Start</th><th className="px-6 py-3 text-left text-xs font-semibold">Duration</th></tr></thead><tbody>{sessions.map(s => (
-                <tr key={s.id} className="hover:bg-zinc-50/80 transition-colors"><td className="px-6 py-4"><div><p className="text-sm font-medium">{s.doctorName || "Unknown"}</p><p className="text-xs font-mono text-zinc-500">{s.doctorId}</p></div></td><td className="px-6 py-4 text-sm">{s.sessionStartedAt ? format(s.sessionStartedAt.toDate(), "MMM d, HH:mm") : "—"}</td><td className="px-6 py-4 text-sm font-mono">{formatSecs(s.durationSeconds)}</td></tr>
-              ))}</tbody></table>
+              <div className="space-y-4">
+                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800"><thead className="bg-zinc-50/80 dark:bg-zinc-900/40"><tr><th className="px-6 py-3 text-left text-xs font-semibold">Doctor</th><th className="px-6 py-3 text-left text-xs font-semibold">Start</th><th className="px-6 py-3 text-left text-xs font-semibold">Duration</th></tr></thead><tbody>{sessions.slice(0, visibleSessions).map(s => (
+                  <tr key={s.id} className="hover:bg-zinc-50/80 transition-colors"><td className="px-6 py-4"><div><p className="text-sm font-medium">{s.doctorName || "Unknown"}</p></div></td><td className="px-6 py-4 text-sm">{s.sessionStartedAt ? format(s.sessionStartedAt.toDate(), "MMM d, hh:mm a") : "—"}</td><td className="px-6 py-4 text-sm font-mono">{formatSecs(s.durationSeconds)}</td></tr>
+                ))}</tbody></table>
+                {sessions.length > visibleSessions && (
+                  <div className="p-4 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <button onClick={() => setVisibleSessions(prev => prev + 5)} className="w-full text-center text-sm font-semibold text-blue-600 hover:text-blue-500 transition-colors">Load More</button>
+                  </div>
+                )}
+              </div>
             )
           ) : (
             bookings.length === 0 ? <p className="p-6 text-center text-zinc-500">No bookings available.</p> : (
-              <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800"><thead className="bg-zinc-50/80 dark:bg-zinc-900/40"><tr><th className="px-6 py-3 text-left text-xs font-semibold">Doctor</th><th className="px-6 py-3 text-left text-xs font-semibold">Date</th><th className="px-6 py-3 text-left text-xs font-semibold">Slot</th><th className="px-6 py-3 text-left text-xs font-semibold">Status</th></tr></thead><tbody>{bookings.map(b => (
-                <tr key={b.id} className="hover:bg-zinc-50/80 transition-colors"><td className="px-6 py-4"><div><p className="text-sm font-medium">{b.doctorName || "Unknown"}</p></div></td><td className="px-6 py-4 text-sm">{b.date}</td><td className="px-6 py-4 text-sm">{b.start_time} - {b.end_time}</td><td className="px-6 py-4 text-sm"><span className="p-1 rounded bg-emerald-50 text-emerald-600">{b.status}</span></td></tr>
-              ))}</tbody></table>
+              <div className="space-y-4">
+                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800"><thead className="bg-zinc-50/80 dark:bg-zinc-900/40"><tr><th className="px-6 py-3 text-left text-xs font-semibold">Doctor</th><th className="px-6 py-3 text-left text-xs font-semibold">Date</th><th className="px-6 py-3 text-left text-xs font-semibold">Slot</th><th className="px-6 py-3 text-left text-xs font-semibold">Status</th></tr></thead><tbody>{bookings.slice(0, visibleBookings).map(b => (
+                  <tr key={b.id} className="hover:bg-zinc-50/80 transition-colors"><td className="px-6 py-4"><div><p className="text-sm font-medium">{b.doctorName || "Unknown"}</p></div></td><td className="px-6 py-4 text-sm">{b.date}</td><td className="px-6 py-4 text-sm">{formatTo12Hr(b.start_time)} - {formatTo12Hr(b.end_time)}</td><td className="px-6 py-4 text-sm"><span className={`p-1 rounded ${b.status === "Cancelled" ? "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400" : b.status === "Completed" ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900/20 dark:text-zinc-400"}`}>{b.status}</span></td></tr>
+                ))}</tbody></table>
+                {bookings.length > visibleBookings && (
+                  <div className="p-4 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <button onClick={() => setVisibleBookings(prev => prev + 5)} className="w-full text-center text-sm font-semibold text-blue-600 hover:text-blue-500 transition-colors">Load More</button>
+                  </div>
+                )}
+              </div>
             )
           )}
         </div>

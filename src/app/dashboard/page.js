@@ -82,7 +82,7 @@ export default function DashboardPage() {
             return t2 - t1;
           });
 
-          recentBook = bkData.slice(0, 10);
+          recentBook = bkData;
         } catch (e) {
           console.warn("Bookings fetch failed:", e.message);
         }
@@ -106,6 +106,16 @@ export default function DashboardPage() {
         <span className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900 dark:border-zinc-800 dark:border-t-white" />
       </div>
     );
+  }
+
+  function formatTo12Hr(time) {
+    if (!time) return "—";
+    if (time.includes("AM") || time.includes("PM")) return time;
+    const [h, m] = time.split(":");
+    const hrs = parseInt(h, 10);
+    const ampm = hrs >= 12 ? "PM" : "AM";
+    const formattedHrs = hrs % 12 || 12;
+    return `${formattedHrs}:${m} ${ampm}`;
   }
 
   const statCards = [
@@ -164,7 +174,7 @@ export default function DashboardPage() {
 
           <div className="space-y-4">
             {recentBookings.length > 0 ? (
-              recentBookings.map((booking) => (
+              recentBookings.slice(0, 5).map((booking) => (
                 <div key={booking.id} className="flex gap-3 items-start border-b border-zinc-100 dark:border-zinc-800/60 pb-3 last:border-0 last:pb-0">
                   <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
                     <CalendarCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -172,9 +182,15 @@ export default function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{booking.doctorName}</p>
                     <p className="text-xs text-zinc-500 mt-0.5 font-mono">{booking.botId}</p>
-                    <p className="mt-1 text-xs text-zinc-400">{booking.date} | {booking.start_time}-{booking.end_time}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{booking.date} | {formatTo12Hr(booking.start_time)} - {formatTo12Hr(booking.end_time)}</p>
                   </div>
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border bg-emerald-50 text-emerald-600 border-emerald-200">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                    booking.status === "Cancelled" 
+                      ? "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/60" 
+                      : booking.status === "Completed"
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/60"
+                        : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-900/20 dark:text-zinc-400 dark:border-zinc-800/60"
+                  }`}>
                     {booking.status}
                   </span>
                 </div>
