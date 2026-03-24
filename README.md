@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Navatar Admin Dashboard
+
+A secure, multi-tenant hospital administration dashboard built with **Next.js 16**, **Tailwind CSS**, and **Firebase** (Auth + Firestore).
+
+## Features
+
+- **Google Authentication** — Validates admins against the `hospitals` Firestore collection
+- **Multi-Admin Support** — Primary admins can invite additional administrators
+- **Doctor Management** — Add, enable/disable, and remove doctors
+- **Navatar Monitoring** — View deployed AI bots and their usage analytics
+- **Usage Analytics** — Charts and metrics powered by real Firestore data
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone & Install
+
+```bash
+git clone https://github.com/<your-username>/Navatar-admin.git
+cd Navatar-admin
+npm install
+```
+
+### 2. Configure Environment
+
+Copy the example env file and fill in your Firebase credentials:
+
+```bash
+cp .env.example .env.local
+```
+
+### 3. Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/
+│   ├── dashboard/
+│   │   ├── admins/       # Multi-admin management
+│   │   ├── doctors/      # Doctor CRUD + add form
+│   │   ├── navatars/     # Bot listing + [id] analytics
+│   │   ├── layout.js     # Sidebar + Header wrapper
+│   │   └── page.js       # Overview dashboard
+│   ├── login/            # Google Auth login
+│   ├── layout.js         # Root layout with AuthProvider
+│   └── page.js           # Redirect to /dashboard
+├── components/layout/    # Sidebar, Header
+├── contexts/             # AuthContext (Firebase Auth + Firestore)
+└── lib/
+    ├── firebase/config.js
+    └── utils.js
+```
 
-## Learn More
+## Firestore Schema
 
-To learn more about Next.js, take a look at the following resources:
+### `hospitals` Collection
+| Field | Type | Description |
+|---|---|---|
+| `adminEmail` | string | Primary admin email |
+| `additionalAdmins` | string[] | Secondary admin emails |
+| `botIds` | string[] | Provisioned Navatar bot IDs |
+| `hospitalName` | string | Display name |
+| `status` | string | `active` or `inactive` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### `doctors` Collection
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Doctor full name |
+| `email` | string | Doctor email |
+| `designation` | string | Specialization |
+| `hospitalId` | string | Reference to hospital doc ID |
+| `status` | string | `active` or `disabled` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### `navatar_usage` Collection
+| Field | Type | Description |
+|---|---|---|
+| `botId` | string | Navatar bot ID |
+| `timestamp` | Timestamp | When interaction occurred |
+| `duration` | number | Interaction duration (seconds) |
+| `patientQuery` | string | User query text |
 
-## Deploy on Vercel
+## Tech Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Next.js 16](https://nextjs.org/)
+- [Tailwind CSS v4](https://tailwindcss.com/)
+- [Firebase](https://firebase.google.com/) (Auth, Firestore)
+- [Recharts](https://recharts.org/)
+- [Lucide React](https://lucide.dev/)
