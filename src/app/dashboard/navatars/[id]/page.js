@@ -115,6 +115,18 @@ export default function NavatarHistoryPage() {
   }, [adminData, id]);
 
   const isInUse = navatarInfo?.activeDoctorId;
+  const isOffline = navatarInfo?.status === "offline";
+
+  const toggleStatus = async () => {
+    const nextStatus = isOffline ? "online" : "offline";
+    try {
+      const { updateDoc } = await import("firebase/firestore");
+      await updateDoc(doc(db, "navatars", id), { status: nextStatus });
+      setNavatarInfo(prev => ({ ...prev, status: nextStatus }));
+    } catch (err) {
+      console.error("Error toggling status:", err);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-5xl mx-auto">
@@ -127,11 +139,28 @@ export default function NavatarHistoryPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-2xl font-bold">{navatarInfo?.name || "Navatar Detail"}</h2>
             <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono font-bold">{id}</span>
-            {isInUse && (
-              <span className="rounded-full bg-blue-50 text-blue-600 border border-blue-200 px-2.5 py-1 text-[11px] font-semibold">
-                In Session — {navatarInfo.activeDoctorName}
+            <div className="flex items-center gap-2 ml-auto">
+              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${
+                isOffline 
+                  ? "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-500" 
+                  : isInUse 
+                    ? "bg-blue-50 text-blue-600 border-blue-200" 
+                    : "bg-emerald-50 text-emerald-600 border-emerald-200"
+              }`}>
+                {isOffline ? "Offline" : isInUse ? `In Session — ${navatarInfo.activeDoctorName}` : "Online"}
               </span>
-            )}
+              
+              <button 
+                onClick={toggleStatus}
+                className={`text-[10px] font-bold px-3 py-1 rounded transition-all border ${
+                  isOffline 
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
+                    : "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                }`}
+              >
+                {isOffline ? "GO ONLINE" : "GO OFFLINE"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

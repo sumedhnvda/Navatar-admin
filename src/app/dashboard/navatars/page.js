@@ -50,12 +50,25 @@ export default function NavatarsPage() {
 
   const isInUse = (nav) => !!nav.activeDoctorId;
 
+  const toggleStatus = async (navId, currentStatus) => {
+    const newStatus = currentStatus === "offline" ? "online" : "offline";
+    try {
+      const { doc, updateDoc } = await import("firebase/firestore");
+      await updateDoc(doc(db, "navatars", navId), { status: newStatus });
+      
+      // Update local state for immediate UI feedback
+      setNavatars(prev => prev.map(n => n.id === navId ? { ...n, status: newStatus } : n));
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Deployed Navatars</h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Live status of your hospital&apos;s AI assistants. Green = available, blue = in session.
+          Live status of your hospital&apos;s AI assistants. Green = online, blue = in session, grey = offline.
         </p>
       </div>
 
@@ -75,26 +88,48 @@ export default function NavatarsPage() {
         ) : (
           navatars.map((nav) => {
             const inUse = isInUse(nav);
+            const isOffline = nav.status === "offline";
+            
             return (
               <div key={nav.id} className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700">
                 <div className="flex flex-1 flex-col p-6">
                   <div className="flex items-start justify-between">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl shadow-inner ${inUse ? "bg-blue-50 dark:bg-blue-900/20" : "bg-indigo-50 dark:bg-indigo-900/20"}`}>
-                      <Bot className={`h-6 w-6 ${inUse ? "text-blue-600 dark:text-blue-400" : "text-indigo-600 dark:text-indigo-400"}`} />
-                    </div>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide border ${
-                      inUse
-                        ? "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
-                        : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl shadow-inner ${
+                      isOffline ? "bg-zinc-100 dark:bg-zinc-900" : (inUse ? "bg-blue-50 dark:bg-blue-900/20" : "bg-emerald-50 dark:bg-emerald-900/20")
                     }`}>
-                      {inUse ? "In Session" : "Available"}
-                    </span>
+                      <Bot className={`h-6 w-6 ${
+                        isOffline ? "text-zinc-400" : (inUse ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400")
+                      }`} />
+                    </div>
+                    
+                    <div className="flex flex-col items-end gap-2 text-right">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide border ${
+                        isOffline
+                          ? "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-500 dark:border-zinc-500/20"
+                          : inUse
+                            ? "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
+                            : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
+                      }`}>
+                        {isOffline ? "Offline" : inUse ? "In Session" : "Online"}
+                      </span>
+                      
+                      <button 
+                        onClick={() => toggleStatus(nav.id, nav.status)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all border ${
+                          isOffline 
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
+                            : "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                        }`}
+                      >
+                        {isOffline ? "GO ONLINE" : "GO OFFLINE"}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-5">
                     <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50 font-mono">{nav.id}</h3>
 
-                    {inUse ? (
+                    {inUse && !isOffline ? (
                       <div className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2">
                         <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                         <div>
@@ -103,7 +138,7 @@ export default function NavatarsPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">No active session</p>
+                      <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{isOffline ? "Bot is currently offline" : "No active session"}</p>
                     )}
                   </div>
                 </div>
