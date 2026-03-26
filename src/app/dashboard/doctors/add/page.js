@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle, User, X } from "lucide-react";
 import Link from "next/link";
+import { UploadButton } from "@/lib/uploadthing";
+import Image from "next/image";
 
 export default function AddDoctorPage() {
   const router = useRouter();
@@ -16,6 +18,7 @@ export default function AddDoctorPage() {
     name: "",
     email: "",
     designation: "",
+    photoUrl: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -80,6 +83,54 @@ export default function AddDoctorPage() {
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <div className="space-y-5">
+            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/10 mb-2">
+              {formData.photoUrl ? (
+                <div className="relative group">
+                  <div className="h-24 w-24 rounded-full overflow-hidden border-4 border-white dark:border-zinc-800 shadow-md">
+                    <Image
+                      src={formData.photoUrl}
+                      alt="Doctor Preview"
+                      width={96}
+                      height={96}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, photoUrl: "" })}
+                    className="absolute -top-1 -right-1 h-6 w-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-20 w-20 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+                    <User className="h-10 w-10 text-zinc-400" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Doctor Profile Photo</p>
+                    <p className="text-xs text-zinc-500 mt-1">PNG, max 200KB</p>
+                  </div>
+                  <UploadButton
+                    endpoint="doctorImage"
+                    onClientUploadComplete={(res) => {
+                      if (res?.[0]) {
+                        setFormData({ ...formData, photoUrl: res[0].ufsUrl });
+                      }
+                    }}
+                    onUploadError={(error) => {
+                      setError(`Upload failed: ${error.message}`);
+                    }}
+                    appearance={{
+                      button: "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 text-sm h-9 px-4 rounded-lg font-medium",
+                      allowedContent: "hidden",
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-2">
               <label htmlFor="name" className="text-sm font-medium text-zinc-900 dark:text-zinc-300">
                 Full Name <span className="text-red-500">*</span>

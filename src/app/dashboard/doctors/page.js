@@ -6,6 +6,7 @@ import { collection, query, where, getDocs, doc, deleteDoc, updateDoc } from "fi
 import { db } from "@/lib/firebase/config";
 import Link from "next/link";
 import { Plus, Trash2, Ban, CheckCircle } from "lucide-react";
+import Image from "next/image";
 
 export default function DoctorsPage() {
   const { adminData } = useAuth();
@@ -30,11 +31,28 @@ export default function DoctorsPage() {
     fetchDoctors();
   }, [adminData]);
 
-  const handleDelete = async (doctorId) => {
-    if (!confirm("Are you sure you want to delete this doctor?")) return;
+  const handleDelete = async (doctor) => {
+    if (!confirm(`Are you sure you want to delete Dr. ${doctor.name}?`)) return;
     try {
-      await deleteDoc(doc(db, "doctors", doctorId));
-      setDoctors(doctors.filter(d => d.id !== doctorId));
+      // 1. Delete from UploadThing if image exists
+      if (doctor.photoUrl) {
+        try {
+          const fileKey = doctor.photoUrl.split("/f/")[1];
+          if (fileKey) {
+            await fetch("/api/uploadthing/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileKeys: [fileKey] }),
+            });
+          }
+        } catch (err) {
+          console.error("Failed to delete image from UploadThing:", err);
+        }
+      }
+
+      // 2. Delete from Firestore
+      await deleteDoc(doc(db, "doctors", doctor.id));
+      setDoctors(doctors.filter(d => d.id !== doctor.id));
     } catch (e) {
       alert("Failed to delete doctor");
     }
@@ -100,11 +118,21 @@ export default function DoctorsPage() {
                   <tr key={doctor.id} className="hover:bg-zinc-50/80 transition-colors dark:hover:bg-zinc-900/30">
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
-                          <span className="text-zinc-600 dark:text-zinc-400 text-sm font-bold">
-                            {doctor.name?.charAt(0)?.toUpperCase() || "D"}
-                          </span>
-                        </div>
+                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                           {doctor.photoUrl ? (
+                             <Image 
+                               src={doctor.photoUrl} 
+                               alt={doctor.name} 
+                               width={40} 
+                               height={40} 
+                               className="h-full w-full object-cover"
+                             />
+                           ) : (
+                             <span className="text-zinc-600 dark:text-zinc-400 text-sm font-bold">
+                               {doctor.name?.charAt(0)?.toUpperCase() || "D"}
+                             </span>
+                           )}
+                         </div>
                         <div>
                           <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{doctor.name}</div>
                           <div className="text-[13px] mt-0.5 text-zinc-500 dark:text-zinc-400">{doctor.email}</div>
@@ -128,7 +156,7 @@ export default function DoctorsPage() {
                         <button onClick={() => handleToggleStatus(doctor)} className="p-2 text-zinc-400 hover:bg-zinc-100 rounded-lg hover:text-amber-600 transition-colors dark:hover:bg-zinc-800" title={doctor.status === 'disabled' ? 'Enable' : 'Disable'}>
                           {doctor.status === 'disabled' ? <CheckCircle className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
                         </button>
-                        <button onClick={() => handleDelete(doctor.id)} className="p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors dark:hover:bg-red-950/30" title="Delete">
+                        <button onClick={() => handleDelete(doctor)} className="p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors dark:hover:bg-red-950/30" title="Delete">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
