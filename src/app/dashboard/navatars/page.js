@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { Bot, Activity, UserCheck } from "lucide-react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
 export default function NavatarsPage() {
@@ -13,51 +13,48 @@ export default function NavatarsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadNavatars() {
-      if (!adminData?.botIds || !Array.isArray(adminData.botIds) || adminData.botIds.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Query the navatars collection using the hospital's assigned botIds
-        // Firestore `in` queries support up to 30 items; slice if needed
-        const subset = adminData.botIds.slice(0, 30);
-        const q = query(collection(db, "navatars"), where("__name__", "in", subset));
-        const snap = await getDocs(q);
-
-        // Build a map of fetched docs keyed by ID
-        const fetchedMap = {};
-        snap.docs.forEach(d => { fetchedMap[d.id] = d.data(); });
-
-        // Preserve the order from botIds; fallback gracefully if doc doesn't exist yet
-        const docsData = adminData.botIds.map(botId => ({
-          id: botId,
-          ...(fetchedMap[botId] || {}),
-        }));
-
-        setNavatars(docsData);
-      } catch (err) {
-        console.error("Error fetching navatars:", err);
-        // Fallback: still show the botIds without live data
-        setNavatars(adminData.botIds.map(botId => ({ id: botId })));
-      } finally {
-        setLoading(false);
-      }
+    if (!adminData?.botIds || !Array.isArray(adminData.botIds) || adminData.botIds.length === 0) {
+      setLoading(false);
+      return;
     }
-    loadNavatars();
+
+    // Firestore `in` queries support up to 30 items
+    const subset = adminData.botIds.slice(0, 30);
+    const q = query(collection(db, "navatars"), where("__name__", "in", subset));
+
+    // Use onSnapshot for REAL-TIME updates
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const fetchedMap = {};
+      snap.docs.forEach(d => { fetchedMap[d.id] = d.data(); });
+
+      const docsData = adminData.botIds.map(botId => ({
+        id: botId,
+        exists: !!fetchedMap[botId],
+        ...(fetchedMap[botId] || {}),
+      }));
+
+      setNavatars(docsData);
+      setLoading(false);
+    }, (err) => {
+      console.error("Error listening to navatars:", err);
+      // Fallback
+      setNavatars(adminData.botIds.map(botId => ({ id: botId, exists: false })));
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [adminData]);
 
   const isInUse = (nav) => !!nav.activeDoctorId;
 
   const toggleStatus = async (navId, currentStatus) => {
-    const newStatus = currentStatus === "offline" ? "online" : "offline";
+    // Standardize to lowercase for comparison
+    const status = currentStatus?.toLowerCase();
+    // We toggle between "offline" and "available"
+    const newStatus = (status === "offline") ? "available" : "offline";
     try {
       const { doc, updateDoc } = await import("firebase/firestore");
       await updateDoc(doc(db, "navatars", navId), { status: newStatus });
-      
-      // Update local state for immediate UI feedback
-      setNavatars(prev => prev.map(n => n.id === navId ? { ...n, status: newStatus } : n));
     } catch (err) {
       console.error("Error updating status:", err);
     }
@@ -68,7 +65,7 @@ export default function NavatarsPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Deployed Navatars</h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Live status of your hospital&apos;s AI assistants. Green = online, blue = in session, grey = offline.
+          Green = available, blue = engaged, grey = offline/not setup.
         </p>
       </div>
 
@@ -88,48 +85,65 @@ export default function NavatarsPage() {
         ) : (
           navatars.map((nav) => {
             const inUse = isInUse(nav);
-            const isOffline = nav.status === "offline";
+            const statusLower = nav.status?.toLowerCase() || "";
+            const isOffline = statusLower === "offline";
+            const exists = nav.exists;
             
             return (
               <div key={nav.id} className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700">
                 <div className="flex flex-1 flex-col p-6">
                   <div className="flex items-start justify-between">
                     <div className={`flex h-12 w-12 items-center justify-center rounded-xl shadow-inner ${
-                      isOffline ? "bg-zinc-100 dark:bg-zinc-900" : (inUse ? "bg-blue-50 dark:bg-blue-900/20" : "bg-emerald-50 dark:bg-emerald-900/20")
+                      !exists ? "bg-zinc-50 dark:bg-zinc-900" : (isOffline ? "bg-zinc-100 dark:bg-zinc-900" : (inUse ? "bg-blue-50 dark:bg-blue-900/20" : "bg-emerald-50 dark:bg-emerald-900/20"))
                     }`}>
                       <Bot className={`h-6 w-6 ${
-                        isOffline ? "text-zinc-400" : (inUse ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400")
+                        !exists ? "text-zinc-300" : (isOffline ? "text-zinc-400" : (inUse ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"))
                       }`} />
                     </div>
                     
                     <div className="flex flex-col items-end gap-2 text-right">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide border ${
-                        isOffline
-                          ? "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-500 dark:border-zinc-500/20"
-                          : inUse
-                            ? "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
-                            : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
+                        !exists
+                          ? "bg-zinc-50 text-zinc-400 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-500"
+                          : isOffline
+                            ? "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-500 dark:border-zinc-500/20"
+                            : inUse
+                              ? "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
+                              : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
                       }`}>
-                        {isOffline ? "Offline" : inUse ? "In Session" : "Online"}
+                        {!exists ? "Bot Not Setup" : isOffline ? "Offline" : inUse ? "Engaged" : "Available"}
                       </span>
                       
-                      <button 
-                        onClick={() => toggleStatus(nav.id, nav.status)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all border ${
-                          isOffline 
-                            ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
-                            : "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
-                        }`}
-                      >
-                        {isOffline ? "GO ONLINE" : "GO OFFLINE"}
-                      </button>
+                      {exists && (
+                        <button 
+                          onClick={() => toggleStatus(nav.id, nav.status)}
+                          className={`text-[10px] font-bold px-2 py-1 rounded transition-all border ${
+                            isOffline 
+                              ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
+                              : "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                          }`}
+                        >
+                          {isOffline ? "MAKE AVAILABLE" : "MAKE OFFLINE"}
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   <div className="mt-5">
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50 font-mono">{nav.id}</h3>
+                    <div className="flex flex-col">
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+                        {nav.name || nav.id}
+                      </h3>
+                      {nav.name && (
+                        <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-tight">
+                          ID: {nav.id}
+                        </span>
+                      )}
+                    </div>
 
-                    {inUse && !isOffline ? (
+                    {!exists ? (
+                      <p className="mt-2 text-sm text-zinc-400 italic">Configuration pending — let bot setup first</p>
+                    ) : inUse && !isOffline ? (
                       <div className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2">
                         <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                         <div>
@@ -143,17 +157,19 @@ export default function NavatarsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center border-t border-zinc-100 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800/60 dark:bg-zinc-900/50">
-                  <div className="flex w-full items-center justify-end">
-                    <Link
-                      href={`/dashboard/navatars/${nav.id}`}
-                      className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
-                    >
-                      View History
-                      <Activity className="h-4 w-4" />
-                    </Link>
+                {exists && (
+                  <div className="flex items-center border-t border-zinc-100 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800/60 dark:bg-zinc-900/50">
+                    <div className="flex w-full items-center justify-end">
+                      <Link
+                        href={`/dashboard/navatars/${nav.id}`}
+                        className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+                      >
+                        View History
+                        <Activity className="h-4 w-4" />
+                      </Link>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             );
           })

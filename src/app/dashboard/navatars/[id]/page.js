@@ -3,16 +3,16 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import Link from "next/link";
-import { ArrowLeft, Clock, MessageSquare, User, Calendar, Timer } from "lucide-react";
+import { ArrowLeft, Clock, MessageSquare, User, Calendar, Timer, Bot } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, subDays, formatDuration, intervalToDuration } from "date-fns";
 
 function formatSecs(secs) {
   if (!secs) return "—";
-  if (secs < 60) return `${Math.round(secs)}s`;
+  if (secs < 60) return Math.round(secs) + "s";
   const d = intervalToDuration({ start: 0, end: secs * 1000 });
   return formatDuration(d, { format: ["minutes", "seconds"] });
 }
@@ -20,11 +20,14 @@ function formatSecs(secs) {
 function formatTo12Hr(time) {
   if (!time) return "—";
   if (time.includes("AM") || time.includes("PM")) return time;
-  const [h, m] = time.split(":");
+  const parts = time.split(":");
+  if (parts.length < 2) return time;
+  const h = parts[0];
+  const m = parts[1];
   const hrs = parseInt(h, 10);
   const ampm = hrs >= 12 ? "PM" : "AM";
   const formattedHrs = hrs % 12 || 12;
-  return `${formattedHrs}:${m} ${ampm}`;
+  return formattedHrs + ":" + m + " " + ampm;
 }
 
 export default function NavatarHistoryPage() {
@@ -42,21 +45,26 @@ export default function NavatarHistoryPage() {
   const [visibleBookings, setVisibleBookings] = useState(5);
 
   useEffect(() => {
-    async function fetchData() {
-      if (!adminData?.hospitalId || !id) return;
+    if (!adminData?.hospitalId || !id) return;
+    
+    // 1. Real-time Status Listener
+    const unsubNavatar = onSnapshot(doc(db, "navatars", id), (snap) => {
+      if (snap.exists()) {
+        setNavatarInfo(snap.data());
+      } else {
+        setNavatarInfo(null);
+      }
+    });
+
+    async function fetchHistory() {
       setLoading(true);
       try {
-        // 1. Fetch live status
-        const navatarSnap = await getDoc(doc(db, "navatars", id));
-        if (navatarSnap.exists()) setNavatarInfo(navatarSnap.data());
-
-        // 2. Fetch History (Sessions) - single field WHERE implies AUTOMATIC standard index support
+        // 2. Fetch History (Sessions)
         const sessionsSnap = await getDocs(
           query(collection(db, "history"), where("botId", "==", id))
         );
         const sessionsData = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // Client-side Sort
         sessionsData.sort((a, b) => {
           const t1 = a.sessionStartedAt?.toDate() || new Date(0);
           const t2 = b.sessionStartedAt?.toDate() || new Date(0);
@@ -64,13 +72,12 @@ export default function NavatarHistoryPage() {
         });
         setSessions(sessionsData);
 
-        // 3. Fetch Bookings - standard WHERE support
+        // 3. Fetch Bookings
         const bookingsSnap = await getDocs(
           query(collection(db, "bookings"), where("botId", "==", id))
         );
         const bookingsData = bookingsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         
-        // Client-side Sort
         bookingsData.sort((a, b) => {
           const t1 = a.createdAt?.toDate() || new Date(0);
           const t2 = b.createdAt?.toDate() || new Date(0);
@@ -78,7 +85,7 @@ export default function NavatarHistoryPage() {
         });
         setBookings(bookingsData);
 
-        // 4. Bar Chart & Stats from sorted data
+        // 4. Stats
         const last7Days = Array.from({ length: 7 }).map((_, i) => {
           const d = subDays(new Date(), 6 - i);
           return { name: format(d, "MMM dd"), sessions: 0, date: format(d, "yyyy-MM-dd") };
@@ -106,23 +113,28 @@ export default function NavatarHistoryPage() {
           setTotalDuration(formatSecs(durationSum));
         }
       } catch (err) {
-        console.error("Error fetching navatar history data:", err.message);
+        console.error("Error fetching history:", err.message);
       } finally {
         setLoading(false);
       }
     }
-    fetchData();
+
+    fetchHistory();
+    return () => unsubNavatar();
   }, [adminData, id]);
 
   const isInUse = navatarInfo?.activeDoctorId;
-  const isOffline = navatarInfo?.status === "offline";
+  const statusLower = navatarInfo?.status?.toLowerCase() || "";
+  const isOffline = statusLower === "offline";
+  const exists = !!navatarInfo;
 
   const toggleStatus = async () => {
-    const nextStatus = isOffline ? "online" : "offline";
+    if (!exists) return;
+    const nextStatus = isOffline ? "available" : "offline";
     try {
       const { updateDoc } = await import("firebase/firestore");
       await updateDoc(doc(db, "navatars", id), { status: nextStatus });
-      setNavatarInfo(prev => ({ ...prev, status: nextStatus }));
+      // Local state will be updated via onSnapshot
     } catch (err) {
       console.error("Error toggling status:", err);
     }
@@ -137,35 +149,48 @@ export default function NavatarHistoryPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-2xl font-bold">{navatarInfo?.name || "Navatar Detail"}</h2>
+            <h2 className="text-2xl font-bold">{navatarInfo?.name || (exists ? "Loading..." : "Navatar Detail")}</h2>
             <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono font-bold">{id}</span>
             <div className="flex items-center gap-2 ml-auto">
               <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${
-                isOffline 
-                  ? "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-500" 
-                  : isInUse 
-                    ? "bg-blue-50 text-blue-600 border-blue-200" 
-                    : "bg-emerald-50 text-emerald-600 border-emerald-200"
+                !exists
+                  ? "bg-zinc-50 text-zinc-400 border-zinc-200"
+                  : isOffline 
+                    ? "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-500" 
+                    : isInUse 
+                      ? "bg-blue-50 text-blue-600 border-blue-200" 
+                      : "bg-emerald-50 text-emerald-600 border-emerald-200"
               }`}>
-                {isOffline ? "Offline" : isInUse ? `In Session — ${navatarInfo.activeDoctorName}` : "Online"}
+                {!exists ? "Bot Not Setup" : isOffline ? "Offline" : isInUse ? `Engaged — ${navatarInfo.activeDoctorName}` : "Available"}
               </span>
               
-              <button 
-                onClick={toggleStatus}
-                className={`text-[10px] font-bold px-3 py-1 rounded transition-all border ${
-                  isOffline 
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
-                    : "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
-                }`}
-              >
-                {isOffline ? "GO ONLINE" : "GO OFFLINE"}
-              </button>
+              {exists && (
+                <button 
+                  onClick={toggleStatus}
+                  className={`text-[10px] font-bold px-3 py-1 rounded transition-all border ${
+                    isOffline 
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
+                      : "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                  }`}
+                >
+                  {isOffline ? "MAKE AVAILABLE" : "MAKE OFFLINE"}
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Analytics & Stats cards remain identical mapping variables accurately */}
+      {!exists && !loading && (
+        <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border border-zinc-200 border-dashed dark:border-zinc-800">
+          <Bot className="h-10 w-10 text-zinc-400 mb-4" />
+          <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">Configuration Pending</h3>
+          <p className="mt-1 text-sm text-zinc-500 max-w-sm">
+            This Navatar has not been set up yet. Once the bot is activated, its statistics and history will appear here.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { icon: MessageSquare, label: "Total Sessions", val: sessions.length, bg: "bg-blue-50 dark:bg-blue-900/20", color: "text-blue-600" },

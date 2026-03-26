@@ -7,7 +7,7 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp } from "fire
 import { db } from "@/lib/firebase/config";
 import { ArrowLeft, Loader2, AlertCircle, User, X } from "lucide-react";
 import Link from "next/link";
-import { UploadButton } from "@/lib/uploadthing";
+import { useUploadThing } from "@/lib/uploadthing";
 import Image from "next/image";
 
 export default function AddDoctorPage() {
@@ -22,6 +22,36 @@ export default function AddDoctorPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const { startUpload, isUploading } = useUploadThing("doctorImage", {
+    onClientUploadComplete: (res) => {
+      if (res?.[0]) {
+        setFormData(prev => ({ ...prev, photoUrl: res[0].ufsUrl }));
+      }
+    },
+    onUploadError: (error) => {
+      setError(`Upload failed: ${error.message}`);
+    },
+  });
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate type (PNG only)
+    if (file.type !== "image/png") {
+      setError("Please upload a PNG image only.");
+      return;
+    }
+
+    // Validate size (200KB)
+    if (file.size > 200 * 1024) {
+      setError("Image size must be less than 200KB.");
+      return;
+    }
+
+    await startUpload([file]);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -104,30 +134,41 @@ export default function AddDoctorPage() {
                   </button>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-20 w-20 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-                    <User className="h-10 w-10 text-zinc-400" />
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-20 w-20 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+                      <User className="h-10 w-10 text-zinc-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Doctor Profile Photo</p>
+                      <p className="text-xs text-zinc-500 mt-1">PNG, max 200KB</p>
+                    </div>
+                    
+                    <div className="relative">
+                      <input
+                        type="file"
+                        id="doctor-photo-upload"
+                        className="hidden"
+                        accept="image/png"
+                        onChange={handleFileChange}
+                        disabled={isUploading}
+                      />
+                      <label
+                        htmlFor="doctor-photo-upload"
+                        className={`inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-medium transition-all cursor-pointer ${
+                          isUploading 
+                            ? "bg-zinc-100 text-zinc-400 dark:bg-zinc-800" 
+                            : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+                        }`}
+                      >
+                        {isUploading ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Uploading...
+                          </div>
+                        ) : "Upload Photo"}
+                      </label>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Doctor Profile Photo</p>
-                    <p className="text-xs text-zinc-500 mt-1">PNG, max 200KB</p>
-                  </div>
-                  <UploadButton
-                    endpoint="doctorImage"
-                    onClientUploadComplete={(res) => {
-                      if (res?.[0]) {
-                        setFormData({ ...formData, photoUrl: res[0].ufsUrl });
-                      }
-                    }}
-                    onUploadError={(error) => {
-                      setError(`Upload failed: ${error.message}`);
-                    }}
-                    appearance={{
-                      button: "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 text-sm h-9 px-4 rounded-lg font-medium",
-                      allowedContent: "hidden",
-                    }}
-                  />
-                </div>
               )}
             </div>
 
